@@ -28,7 +28,7 @@ subprojects {
     compile group: 'org.codehaus.janino', name: 'janino', version:'2.7.8'
     compile group: 'net.shibboleth.utilities', name: 'java-support', version:'7.2.0'
     compile group: 'javax.mail', name: 'mail', version:'1.4.7'
-    compile group: 'org.opensaml', name: 'opensaml-messaging-api', version:'3.2.0'
+    compile group: 'org.opensaml', name: 'opensaml-messaging-api', version:'3.3.0'
     compile group: 'org.springframework', name: 'spring-context-support', version:'4.2.3.RELEASE'
     compile group: 'org.springframework', name: 'spring-jdbc', version: '4.2.3.RELEASE'
     compile group: 'org.slf4j', name: 'slf4j-api', version:'1.7.12'

@@ -33,6 +33,11 @@
       p:seedFetcher-ref="shibboleth.totp.seedfetcher">
   </bean>
 
+    <bean id="shibboleth.authn.Totp.UsernameLookupStrategy"
+        class="net.shibboleth.idp.session.context.navigate.CanonicalUsernameLookupStrategy" />
+
+    <alias name="shibboleth.authn.Totp.UsernameLookupStrategy" alias="CanonicalUsernameStrategy" />
+
   <!-- For LDAP -->
   <!--
   <bean id="RegisterNewToken" class="net.kvak.shibboleth.totpauth.authn.impl.RegisterNewToken" scope="prototype"

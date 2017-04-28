@@ -24,6 +24,7 @@
 			<evaluate
 				expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
 				result="viewScope.custom" />
+			<set name="viewScope.canonicalUsername" value="CanonicalUsernameStrategy.apply(opensamlProfileRequestContext)" />
 		</on-render>
 
 		<transition on="proceed" to="ExtractTotpFromForm" />
@@ -41,6 +42,7 @@
 			<evaluate
 				expression="flowRequestContext.getActiveFlow().getApplicationContext().containsBean('shibboleth.CustomViewContext') ? flowRequestContext.getActiveFlow().getApplicationContext().getBean('shibboleth.CustomViewContext') : null"
 				result="viewScope.custom" />
+			<set name="viewScope.canonicalUsername" value="CanonicalUsernameStrategy.apply(opensamlProfileRequestContext)" />
 		</on-render>
 
 		<transition on="AccountError" to="RegisterToken" />

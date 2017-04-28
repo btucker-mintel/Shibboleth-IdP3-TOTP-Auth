@@ -1,6 +1,7 @@
 package net.kvak.shibboleth.totpauth.authn.impl;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import net.kvak.shibboleth.totpauth.api.authn.SeedFetcher;
 import org.opensaml.profile.context.ProfileRequestContext;
@@ -14,9 +15,13 @@ import net.shibboleth.idp.profile.AbstractProfileAction;
 import net.shibboleth.utilities.java.support.annotation.constraint.NotEmpty;
 import net.shibboleth.utilities.java.support.component.ComponentInitializationException;
 import net.shibboleth.utilities.java.support.primitive.StringSupport;
+import net.shibboleth.idp.session.context.navigate.CanonicalUsernameLookupStrategy;
 import org.opensaml.profile.action.ActionSupport;
 import net.shibboleth.idp.authn.AuthnEventIds;
 import net.kvak.shibboleth.totpauth.api.authn.context.TokenUserContext.AuthState;
+import net.shibboleth.utilities.java.support.logic.FunctionSupport;
+
+import com.google.common.base.Function;
 
 
 @SuppressWarnings("rawtypes")
@@ -28,13 +33,22 @@ public class CheckForSeed extends AbstractProfileAction {
 
 	TokenUserContext tokenUserCtx;
 
-	UsernamePasswordContext upCtx;
+	 /** Lookup strategy for username to match against Token identity. */
+	 @Nonnull private Function<ProfileRequestContext,String> usernameLookupStrategy;
 
+	 /** Attempted username */
+	 @Nullable @NotEmpty private String username;
 
 	/** Seed Fetcher implementation **/
 	@Nonnull
 	@NotEmpty
 	private SeedFetcher seedFetcher;
+
+  	/** Constructor **/
+  	public CheckForSeed() {
+    		super();
+    		usernameLookupStrategy = new CanonicalUsernameLookupStrategy();
+  	}
 
 	/** Inject token authenticator **/
 	public void setseedFetcher(@Nonnull @NotEmpty final SeedFetcher seedFetcher) {
@@ -53,8 +67,7 @@ public class CheckForSeed extends AbstractProfileAction {
 		try {
 			tokenUserCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
 					.getSubcontext(TokenUserContext.class, true);
-			upCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
-					.getSubcontext(UsernamePasswordContext.class);
+			username = usernameLookupStrategy.apply(profileRequestContext);
 			return true;
 		} catch (Exception e) {
 			log.debug("Error with doPreExecute", e);
@@ -68,7 +81,6 @@ public class CheckForSeed extends AbstractProfileAction {
 	protected void doExecute(@Nonnull final ProfileRequestContext profileRequestContext) {
     	log.debug("Entering CheckForSeed doExecute");
 
-		String username = upCtx.getUsername();
     	seedFetcher.getSeed(username, tokenUserCtx);
     	if (tokenUserCtx.getState() != AuthState.OK) {
     		ActionSupport.buildEvent(profileRequestContext, AuthnEventIds.INVALID_CREDENTIALS);

@@ -1,6 +1,7 @@
 package net.kvak.shibboleth.totpauth.authn.impl;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.opensaml.profile.context.ProfileRequestContext;
 import org.slf4j.Logger;
@@ -13,10 +14,14 @@ import com.warrenstrange.googleauth.GoogleAuthenticatorQRGenerator;
 import net.kvak.shibboleth.totpauth.api.authn.context.TokenUserContext;
 import net.shibboleth.idp.authn.context.AuthenticationContext;
 import net.shibboleth.idp.authn.context.UsernamePasswordContext;
+import net.shibboleth.idp.session.context.navigate.CanonicalUsernameLookupStrategy;
 import net.shibboleth.idp.profile.AbstractProfileAction;
 import net.shibboleth.utilities.java.support.annotation.constraint.NotEmpty;
 import net.shibboleth.utilities.java.support.component.ComponentInitializationException;
 import net.shibboleth.utilities.java.support.primitive.StringSupport;
+import net.shibboleth.utilities.java.support.logic.FunctionSupport;
+
+import com.google.common.base.Function;
 
 @SuppressWarnings("rawtypes")
 public class GenerateNewToken extends AbstractProfileAction {
@@ -27,7 +32,11 @@ public class GenerateNewToken extends AbstractProfileAction {
 
 	TokenUserContext tokenCtx;
 
-	UsernamePasswordContext upCtx;
+	/** Lookup strategy for username to match against Token identity. */
+	@Nonnull private Function<ProfileRequestContext,String> usernameLookupStrategy;
+
+	/** Attempted username. */
+	@Nullable @NotEmpty private String username;
 
 	/** Google Authenticator **/
 	@Nonnull
@@ -38,6 +47,14 @@ public class GenerateNewToken extends AbstractProfileAction {
 	@Nonnull
 	@NotEmpty
 	private String gAuthIssuerName;
+
+
+	/** Constructor **/
+	public GenerateNewToken() {
+		super();
+		usernameLookupStrategy = new CanonicalUsernameLookupStrategy();
+	}
+
 
 	/** Inject token authenticator **/
 	public void setgAuth(@Nonnull @NotEmpty final GoogleAuthenticator gAuth) {
@@ -60,8 +77,7 @@ public class GenerateNewToken extends AbstractProfileAction {
 		try {
 			tokenCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
 					.getSubcontext(TokenUserContext.class, true);
-			upCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
-					.getSubcontext(UsernamePasswordContext.class);
+			username = usernameLookupStrategy.apply(profileRequestContext);
 			return true;
 		} catch (Exception e) {
 			log.debug("Error with doPreExecute", e);
@@ -76,7 +92,7 @@ public class GenerateNewToken extends AbstractProfileAction {
     	log.debug("Entering GenerateNewToken doExecute");
 
 		try {
-			log.debug("Trying to create new token for {}", upCtx.getUsername());
+			log.debug("Trying to create new token for {}", username);
 			generateToken();
 		} catch (Exception e) {
 			log.debug("Failed to create new token", e);
@@ -85,17 +101,17 @@ public class GenerateNewToken extends AbstractProfileAction {
 	}
 
 	private void generateToken() {
-		log.debug("Generating new token shared secret and URL for {}", upCtx.getUsername());
+		log.debug("Generating new token shared secret and URL for {}", username);
 
 		try {
 			final GoogleAuthenticatorKey key = gAuth.createCredentials();
 
-			String totpUrl = GoogleAuthenticatorQRGenerator.getOtpAuthURL(gAuthIssuerName, upCtx.getUsername(), key);
-			log.debug("Totp URL for {} is {}", upCtx.getUsername(), totpUrl);
+			String totpUrl = GoogleAuthenticatorQRGenerator.getOtpAuthURL(gAuthIssuerName, username, key);
+			log.debug("Totp URL for {} is {}", username, totpUrl);
 			tokenCtx.setTotpUrl(totpUrl);
 
 			String sharedSecret = StringSupport.trimOrNull(key.getKey());
-			log.debug("Shared secret for {} is {}", upCtx.getUsername(), sharedSecret);
+			log.debug("Shared secret for {} is {}", username, sharedSecret);
 			tokenCtx.setSharedSecret(sharedSecret);
 
 		} catch (Exception e) {

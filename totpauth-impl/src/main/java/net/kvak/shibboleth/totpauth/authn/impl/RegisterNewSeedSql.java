@@ -3,6 +3,7 @@ package net.kvak.shibboleth.totpauth.authn.impl;
 import java.util.List;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.DirContext;
@@ -23,6 +24,7 @@ import com.warrenstrange.googleauth.GoogleAuthenticator;
 
 import net.kvak.shibboleth.totpauth.api.authn.context.TokenUserContext;
 import net.kvak.shibboleth.totpauth.api.authn.context.TokenUserContext.AuthState;
+import net.shibboleth.idp.session.context.navigate.CanonicalUsernameLookupStrategy;
 import net.kvak.shibboleth.totpauth.authn.impl.TotpUtils;
 import net.shibboleth.idp.authn.AuthnEventIds;
 import net.shibboleth.idp.authn.context.AuthenticationContext;
@@ -31,6 +33,9 @@ import net.shibboleth.idp.profile.AbstractProfileAction;
 import net.shibboleth.utilities.java.support.annotation.constraint.NotEmpty;
 import net.shibboleth.utilities.java.support.component.ComponentSupport;
 import net.shibboleth.utilities.java.support.primitive.StringSupport;
+import net.shibboleth.utilities.java.support.logic.FunctionSupport;
+
+import com.google.common.base.Function;
 
 /**
  * Validates users TOTP token code against injected authenticator
@@ -84,10 +89,11 @@ public class RegisterNewSeedSql extends AbstractProfileAction {
 	@NotEmpty
 	private String seedColumnName;
 
-	/** Username context for username **/
-	@Nonnull
-	@NotEmpty
-	private UsernamePasswordContext upCtx;
+  /** Lookup strategy for username to match against Token identity. */
+  @Nonnull private Function<ProfileRequestContext,String> usernameLookupStrategy;
+
+  /** Attempted username. */
+  @Nullable @NotEmpty private String username;
 
 	/** Token user context */
 	@Nonnull
@@ -112,6 +118,7 @@ public class RegisterNewSeedSql extends AbstractProfileAction {
 		this.seedDbTableName = seedDbTableName;
 		this.usernameColumnName = usernameColumnName;
 		this.seedColumnName = seedColumnName;
+    usernameLookupStrategy = new CanonicalUsernameLookupStrategy();
 	}
 
 	public void settokenCodeField(@Nonnull @NotEmpty final String fieldName) {
@@ -127,8 +134,7 @@ public class RegisterNewSeedSql extends AbstractProfileAction {
 		try {
 			tokenCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
 					.getSubcontext(TokenUserContext.class, true);
-			upCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
-					.getSubcontext(UsernamePasswordContext.class);
+			username = usernameLookupStrategy.apply(profileRequestContext);
 			return true;
 		} catch (Exception e) {
 			log.debug("Error with doPreExecute", e);
@@ -151,7 +157,6 @@ public class RegisterNewSeedSql extends AbstractProfileAction {
 		}
 
 
-		String username = upCtx.getUsername();
 		String token = StringSupport.trimOrNull(request.getParameter(tokenCodeField));
 
 		if (!StringUtils.isNumeric(token) || Strings.isNullOrEmpty(token)) {

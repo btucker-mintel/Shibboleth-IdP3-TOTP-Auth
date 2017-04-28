@@ -3,6 +3,7 @@ package net.kvak.shibboleth.totpauth.authn.impl;
 import java.util.List;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.DirContext;
@@ -33,14 +34,17 @@ import net.shibboleth.idp.profile.AbstractProfileAction;
 import net.shibboleth.utilities.java.support.annotation.constraint.NotEmpty;
 import net.shibboleth.utilities.java.support.component.ComponentSupport;
 import net.shibboleth.utilities.java.support.primitive.StringSupport;
+import net.shibboleth.idp.session.context.navigate.CanonicalUsernameLookupStrategy;
+import net.shibboleth.utilities.java.support.logic.FunctionSupport;
+import com.google.common.base.Function;
 
 /**
  * Validates users TOTP token code against injected authenticator
- * 
+ *
  * An action that checks for a {@link TokenCodeContext} and directly produces an
  * {@link net.shibboleth.idp.authn.AuthenticationResult} based on submitted
  * tokencode and username
- * 
+ *
  * @author korteke
  *
  */
@@ -79,10 +83,11 @@ public class RegisterNewToken extends AbstractProfileAction {
 	@NotEmpty
 	private String seedAttribute;
 
-	/** Username context for username **/
-	@Nonnull
-	@NotEmpty
-	private UsernamePasswordContext upCtx;
+  	/** Lookup strategy for username to match against Token identity. */
+  	@Nonnull private Function<ProfileRequestContext,String> usernameLookupStrategy;
+
+  	/** Attempted username. */
+  	@Nullable @NotEmpty private String username;
 
 	/** Token user context */
 	@Nonnull
@@ -106,6 +111,7 @@ public class RegisterNewToken extends AbstractProfileAction {
 		log.debug("Construct RegisterNewToken with {} - {}", seedAttribute, userAttribute);
 		this.userAttribute = userAttribute;
 		this.seedAttribute = seedAttribute;
+    		usernameLookupStrategy = new CanonicalUsernameLookupStrategy();
 	}
 
 	public void settokenCodeField(@Nonnull @NotEmpty final String fieldName) {
@@ -121,8 +127,7 @@ public class RegisterNewToken extends AbstractProfileAction {
 		try {
 			tokenCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
 					.getSubcontext(TokenUserContext.class, true);
-			upCtx = profileRequestContext.getSubcontext(AuthenticationContext.class)
-					.getSubcontext(UsernamePasswordContext.class);
+			username = usernameLookupStrategy.apply(profileRequestContext);
 			return true;
 		} catch (Exception e) {
 			log.debug("Error with doPreExecute", e);
@@ -157,10 +162,10 @@ public class RegisterNewToken extends AbstractProfileAction {
 			boolean tokenValidate = totpUtils.validateToken(tokenCtx.getSharedSecret(), Integer.parseInt(token));
 			if (tokenValidate) {
 
-				String dn = fetchDn(upCtx.getUsername());
+				String dn = fetchDn(username);
 
 				if (!Strings.isNullOrEmpty(dn)) {
-					log.debug("{} User {} DN is {}", getLogPrefix(), upCtx.getUsername(), dn);
+					log.debug("{} User {} DN is {}", getLogPrefix(), username, dn);
 					boolean result = registerToken(dn, tokenCtx.getSharedSecret());
 
 					if (!result) {

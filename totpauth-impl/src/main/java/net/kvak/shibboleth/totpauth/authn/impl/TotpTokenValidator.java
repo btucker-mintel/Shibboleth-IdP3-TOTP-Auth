@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.security.auth.Subject;
 
 import org.opensaml.profile.context.ProfileRequestContext;
@@ -16,6 +17,7 @@ import net.kvak.shibboleth.totpauth.api.authn.SeedFetcher;
 import net.kvak.shibboleth.totpauth.api.authn.TokenValidator;
 import net.kvak.shibboleth.totpauth.api.authn.context.TokenUserContext;
 import net.kvak.shibboleth.totpauth.api.authn.context.TokenUserContext.AuthState;
+import net.shibboleth.idp.session.context.navigate.CanonicalUsernameLookupStrategy;
 import net.shibboleth.idp.authn.AbstractValidationAction;
 import net.shibboleth.idp.authn.AuthnEventIds;
 import net.shibboleth.idp.authn.context.AuthenticationContext;
@@ -23,14 +25,17 @@ import net.shibboleth.idp.authn.context.UsernamePasswordContext;
 import net.shibboleth.idp.authn.principal.UsernamePrincipal;
 import net.shibboleth.utilities.java.support.annotation.constraint.NotEmpty;
 import net.shibboleth.utilities.java.support.primitive.StringSupport;
+import net.shibboleth.utilities.java.support.logic.FunctionSupport;
+
+import com.google.common.base.Function;
 
 /**
  * Validates users TOTP token code against injected authenticator
- * 
+ *
  * An action that checks for a {@link TokenCodeContext} and directly produces an
  * {@link net.shibboleth.idp.authn.AuthenticationResult} based on submitted
  * tokencode and username
- * 
+ *
  * @author korteke
  *
  */
@@ -47,10 +52,11 @@ public class TotpTokenValidator extends AbstractValidationAction implements Toke
 	@NotEmpty
 	private GoogleAuthenticator gAuth;
 
-	/** Username context for username **/
-	@Nonnull
-	@NotEmpty
-	private UsernamePasswordContext upCtx;
+  /** Lookup strategy for username to match against Token identity. */
+  @Nonnull private Function<ProfileRequestContext,String> usernameLookupStrategy;
+
+  /** Attempted username. */
+  @Nullable @NotEmpty private String username;
 
 	/** Injected seedFetcher **/
 	@Nonnull
@@ -72,7 +78,7 @@ public class TotpTokenValidator extends AbstractValidationAction implements Toke
 	/** Constructor **/
 	public TotpTokenValidator() {
 		super();
-
+    usernameLookupStrategy = new CanonicalUsernameLookupStrategy();
 	}
 
 	@Override
@@ -83,14 +89,14 @@ public class TotpTokenValidator extends AbstractValidationAction implements Toke
 		try {
 
 			TokenUserContext tokenCtx = authenticationContext.getSubcontext(TokenUserContext.class, true);
-			upCtx = authenticationContext.getSubcontext(UsernamePasswordContext.class, true);
+			username = usernameLookupStrategy.apply(profileRequestContext);
 
 			/* Add seeds from repository to tokenUserContext */
-			seedFetcher.getSeed(upCtx.getUsername(), tokenCtx);
+			seedFetcher.getSeed(username, tokenCtx);
 
 			if (tokenCtx.getState() == AuthState.OK) {
 				log.debug("{} Validating user token against seed", getLogPrefix());
-				
+
 				/* Get seeds from tokenUserContext */
 				ArrayList<String> seeds = tokenCtx.getTokenSeed();
 
@@ -99,23 +105,23 @@ public class TotpTokenValidator extends AbstractValidationAction implements Toke
 				while (it.hasNext()) {
 					result = validateToken(it.next(), tokenCtx.getTokenCode());
 					if (result) {
-						log.info("{} Token authentication success for user: {}", getLogPrefix(), upCtx.getUsername());
+						log.info("{} Token authentication success for user: {}", getLogPrefix(), username);
 						tokenCtx.setState(AuthState.OK);
 						buildAuthenticationResult(profileRequestContext, authenticationContext);
 						return;
 					}
 				}
 			}
-			
+
 			if (tokenCtx.getState() == AuthState.REGISTER) {
-				log.info("{} User: {} has not registered token", getLogPrefix(), upCtx.getUsername());
+				log.info("{} User: {} has not registered token", getLogPrefix(), username);
 				handleError(profileRequestContext, authenticationContext, "RegisterToken",
 						AuthnEventIds.ACCOUNT_ERROR);
 				return;
 			}
 
 			if (!result) {
-				log.info("{} Token authentication failed for user: {}", getLogPrefix(), upCtx.getUsername());
+				log.info("{} Token authentication failed for user: {}", getLogPrefix(), username);
 				tokenCtx.setState(AuthState.CANT_VALIDATE);
 				handleError(profileRequestContext, authenticationContext, "InvalidCredentials",
 						AuthnEventIds.INVALID_CREDENTIALS);
@@ -123,7 +129,7 @@ public class TotpTokenValidator extends AbstractValidationAction implements Toke
 			}
 
 		} catch (Exception e) {
-			log.warn("{} Login by {} produced exception", getLogPrefix(), upCtx.getUsername(), e);
+			log.warn("{} Login by {} produced exception", getLogPrefix(), username, e);
 			handleError(profileRequestContext, authenticationContext, "InvalidCredentials",
 					AuthnEventIds.INVALID_CREDENTIALS);
 		}
@@ -144,13 +150,13 @@ public class TotpTokenValidator extends AbstractValidationAction implements Toke
 
 	@Override
 	protected Subject populateSubject(Subject subject) {
-		if (StringSupport.trimOrNull(upCtx.getUsername()) != null) {
-			log.debug("{} Populate subject {}", getLogPrefix(), upCtx.getUsername());
-			subject.getPrincipals().add(new UsernamePrincipal(upCtx.getUsername()));
+		if (StringSupport.trimOrNull(username) != null) {
+			log.debug("{} Populate subject {}", getLogPrefix(), username);
+			subject.getPrincipals().add(new UsernamePrincipal(username));
 			return subject;
 		}
 		return null;
 
 	}
-	
+
 }
